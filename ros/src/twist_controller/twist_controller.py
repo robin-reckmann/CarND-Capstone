@@ -1,3 +1,4 @@
+import rospy
 from yaw_controller import YawController
 
 GAS_DENSITY = 2.858
@@ -34,16 +35,27 @@ class Controller(object):
 
         if enabled:
             delta_velocity = target_velocity - current_velocity
-            if abs(delta_velocity) > self.brake_deadband:
-                if delta_velocity > 0:
-                    # car should speed up for now use simple binary control
-                    throttle = 0.1 * 100
+            if delta_velocity > 0.0:
+                # car should speed up
+                if target_velocity > 1.0:
+                    throttle = 5.0 + (50.0 * delta_velocity / target_velocity)
                 else:
-                    # car should slow down for now use simple binary control
-                    brake = 0.1
+                    throttle = 1.0
+            elif target_velocity < 1.0:
+                brake = 100.0
+            elif delta_velocity > -1.0:
+                # do nothing if close to target speed
+                pass
+            else:
+                brake = 10.0 + (90.0 * abs(delta_velocity) / current_velocity)
 
             # ask the yaw controller for the next steering command
             steer = self.yaw_controller.get_steering(target_velocity, target_yaw, current_velocity)
+            if current_velocity < 4.0:
+                if steer > 1.0:
+                    steer = 1.0
+                elif steer < -1.0:
+                    steer = -1.0
 
         # Return throttle, brake, steer
         return throttle, brake, steer
