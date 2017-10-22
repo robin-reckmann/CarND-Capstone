@@ -5,6 +5,9 @@ from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 from std_msgs.msg import Int32
 from copy import deepcopy
+from scipy import spatial
+import numpy as np
+import tf
 
 import math
 
@@ -62,6 +65,8 @@ class WaypointUpdater(object):
         # get the maximum detection distance for the lights in m
         self.max_detect_distance = rospy.get_param('/tl_detector/max_detect_distance', 100)
 
+        self.tree = None
+
         self.loop()
 
     def loop(self):
@@ -111,38 +116,27 @@ class WaypointUpdater(object):
             self.current_waypoint_index.publish(wp_closest)
 
     def locateNextWaypoint(self):
-        min_distance = 1e6
-        wp_closest = None
-        wp_offset = 0
-        last_distance = None
-        if self.current_wp != None:
-            wp_offset = self.current_wp
-        for wp in range(len(self.waypoints)):
-            wp_index = (wp + wp_offset - 2) % len(self.waypoints)
-            distance = self.distanceCarToWaypoint(self.current_pose, self.waypoints[wp_index].pose.pose)
-            if self.extraDebug:
-                rospy.loginfo("locateNextWaypoint: index=%s wp(%s,%s,%s) car(%s,%s,%s) distance=%s", wp_index,
-                              self.waypoints[wp_index].pose.pose.position.x,
-                              self.waypoints[wp_index].pose.pose.position.y,
-                              self.waypoints[wp_index].pose.pose.position.z,
-                              self.current_pose.position.x,
-                              self.current_pose.position.y,
-                              self.current_pose.position.z,
-                              distance)
-            if distance < min_distance:
-                min_distance = distance
-                wp_closest = wp_index
-                if self.extraDebug:
-                    rospy.loginfo("locateNextWaypoint: wp_index=%s last_distance=%s distance=%s", wp_index, last_distance, distance)
-            else:
-                if last_distance != None and last_distance < distance:
-                    break
-            last_distance = distance
 
-        rospy.loginfo("locateNextWaypoint: wp_closet=%s distance=%s", wp_closest, min_distance)
+        #query the nearest point to the vehicle
+        distance, wps_closest = self.tree.query(np.array([[self.current_pose.position.x, self.current_pose.position.y, self.current_pose.position.z]]))
 
-        # store this nearest waypoint for next time - probably no good if the car goes backwards!
-        self.current_wp = wp_closest
+        wp_closest = wps_closest[0]
+
+        #calculate euler angles of current vehicle pose
+        euler = tf.transformations.euler_from_quaternion([self.current_pose.orientation.x,self.current_pose.orientation.y,
+                                                          self.current_pose.orientation.z,self.current_pose.orientation.w])
+
+        #calculate the heading of the closest waypoint
+        heading_to_waypoint = math.atan2(self.waypoints[wp_closest].pose.pose.position.y-self.current_pose.position.y,
+                            self.waypoints[wp_closest].pose.pose.position.x-self.current_pose.position.x)\
+                - euler[2]
+
+        #if the closest waypoint is behind the vehicle, take the next one (probably in front of the vehicle)
+        if math.fabs(heading_to_waypoint) > math.pi/2:
+            wp_closest = wp_closest+1
+
+        rospy.loginfo("locateNextWaypoints: wp_closest=%s", wp_closest)
+
         return wp_closest
 
     def distanceCarToWaypoint(self, pose, waypoint):
@@ -162,7 +156,23 @@ class WaypointUpdater(object):
         rospy.loginfo("waypoints_cb: received %s base waypoints", len(waypoints.waypoints))
         self.base_waypoints = waypoints.waypoints
         self.waypoints = deepcopy(self.base_waypoints)
-        pass
+
+        #setup a kd-tree for efficient nearest neighor lookup
+        #(see https://docs.scipy.org/doc/scipy-0.19.1/reference/generated/scipy.spatial.KDTree.html)
+        #(Paper: https://www.cs.umd.edu/~mount/Papers/iccs01-kflat.pdf)
+
+        x=[]
+        y=[]
+        z=[]
+
+        for waypoint in waypoints.waypoints:
+            x.append(waypoint.pose.pose.position.x)
+            y.append(waypoint.pose.pose.position.y)
+            z.append(waypoint.pose.pose.position.z)
+
+        data = zip(x,y,z)
+
+        self.tree = spatial.KDTree(data)
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
