@@ -76,7 +76,7 @@ class WaypointUpdater(object):
         rate = rospy.Rate(self.update_rate)
         while not rospy.is_shutdown():
             # do we have the base waypoints yet?
-            if self.waypoints and self.current_pose != None:
+            if self.waypoints and self.current_pose and self.tree != None:
                 # find out which waypoint we are next nearest to
                 wp_closest = self.locateNextWaypoint()
 
