@@ -93,7 +93,7 @@ class WaypointUpdater(object):
                                                                              self.waypoints[self.next_stop].pose.pose)
                             if wp_distance_to_stop < self.max_detect_distance:
                                 if self.next_stop_state != TrafficLight.GREEN:
-                                    if wp_distance_to_stop < 5.0:
+                                    if wp_distance_to_stop < 2.0:
                                         target_velocity = 0.0
                                     else:
                                         target_velocity = target_velocity * (wp_distance_to_stop / self.max_detect_distance)
