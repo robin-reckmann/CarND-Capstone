@@ -92,7 +92,7 @@ class TLClassifier(object):
         # Expands image dims as model expects images to have shape: [1, None, None, 3]
         image_np = cv2.resize(image, (300, 300))
         image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-        image_np_expanded = np.expand_dims(image, axis=0)
+        image_np_expanded = np.expand_dims(image_np, axis=0)
 
         # Names tensors that will be used 
         image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
