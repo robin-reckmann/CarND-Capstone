@@ -68,6 +68,9 @@ class WaypointUpdater(object):
         self.max_detect_distance = rospy.get_param('/tl_detector/max_detect_distance', 100)
         # spacial tree to store waypoints
         self.tree = None
+        # number waypoints ahead to plan for
+        self.waypoint_loookahead = LOOKAHEAD_WPS
+
 
         self.loop()
 
@@ -83,7 +86,7 @@ class WaypointUpdater(object):
                 # build the list of next waypoints
                 waypoints = []
                 if wp_closest != None:
-                    for wp in range(LOOKAHEAD_WPS):
+                    for wp in range(self.waypoint_loookahead):
                         wp_index = (wp + wp_closest) % len(self.waypoints)
                         wp_velocity = self.get_waypoint_velocity(self.base_waypoints[wp_index])
                         target_velocity = min(self.speed_limit, wp_velocity)
@@ -139,7 +142,7 @@ class WaypointUpdater(object):
 
         #if the closest waypoint is behind the vehicle, take the next one (probably in front of the vehicle)
         if math.fabs(heading_to_waypoint) > math.pi/2:
-            wp_closest = wp_closest+1
+            wp_closest = (wp_closest + 1) % len(self.waypoints)
 
         rospy.loginfo("locateNextWaypoints: wp_closest=%s distance=%.2fm", wp_closest, distance)
 
@@ -156,10 +159,10 @@ class WaypointUpdater(object):
         pass
 
     def waypoints_cb(self, waypoints):
-        rospy.loginfo("waypoints_cb: received %s base waypoints", len(waypoints.waypoints))
         self.base_waypoints = waypoints.waypoints
         self.waypoints = deepcopy(self.base_waypoints)
-
+        self.waypoint_loookahead = min(LOOKAHEAD_WPS, len(waypoints.waypoints) - 1)
+        rospy.loginfo("waypoints_cb: received %s base waypoints setting lookahead to %s", len(waypoints.waypoints), self.waypoint_loookahead)
         #setup a kd-tree for efficient nearest neighor lookup
         #(see https://docs.scipy.org/doc/scipy-0.19.1/reference/generated/scipy.spatial.KDTree.html)
         #(Paper: https://www.cs.umd.edu/~mount/Papers/iccs01-kflat.pdf)

@@ -34,11 +34,13 @@ class TLDetector(object):
         # array of waypoint indexes indicating the nearest waypoint to a stop line
         self.init_done = False
         # get the maximum detection distance for the lights in m
-        self.max_detect_distance = rospy.get_param('/tl_detector/max_detect_distance', 100)
-        # simulation environment
-        self.simulation = True
+        self.max_detect_distance = rospy.get_param('~max_detect_distance', 100)
+        # use simulation environment light status
+        self.simulation = False
         # light state enum strings
         self.light_state_str = ['red', 'yellow', 'green', 'unknown', 'unknown']
+        # number waypoints ahead to plan for
+        self.waypoint_loookahead = LOOKAHEAD_WPS
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -60,14 +62,16 @@ class TLDetector(object):
         self.upcoming_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
         self.upcoming_light_state_pub = rospy.Publisher('/traffic_state', UInt8, queue_size=1)
 
-        self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
-        self.listener = tf.TransformListener()
-
         self.state = TrafficLight.UNKNOWN
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+
+        self.classifier_ready = False
+        self.bridge = CvBridge()
+        self.light_classifier = TLClassifier()
+        self.listener = tf.TransformListener()
+        self.classifier_ready = True
 
         rospy.spin()
 
@@ -76,6 +80,8 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        self.waypoint_loookahead = min(LOOKAHEAD_WPS, len(waypoints.waypoints) - 1)
+        rospy.loginfo("waypoints_cb: received %s base waypoints setting lookahead to %s", len(waypoints.waypoints), self.waypoint_loookahead)
 
     def current_waypoint_cb(self, index):
         self.current_waypoint_index = index.data
@@ -133,24 +139,25 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
-        self.has_image = True
-        self.camera_image = msg
-        self.light_wp, state = self.process_traffic_lights()
+        if self.classifier_ready:
+            self.has_image = True
+            self.camera_image = msg
+            self.light_wp, state = self.process_traffic_lights()
 
-        '''
-        Publish upcoming red lights at camera frequency.
-        Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
-        of times till we start using it. Otherwise the previous stable state is
-        used.
-        '''
-        if self.state != state:
-            self.state_count = 0
-            self.state = state
-        elif self.state_count >= STATE_COUNT_THRESHOLD:
-            self.last_state = self.state
-        self.state_count += 1
-        self.upcoming_light_pub.publish(Int32(self.light_wp))
-        self.upcoming_light_state_pub.publish(UInt8(self.last_state))
+            '''
+            Publish upcoming red lights at camera frequency.
+            Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
+            of times till we start using it. Otherwise the previous stable state is
+            used.
+            '''
+            if self.state != state:
+                self.state_count = 0
+                self.state = state
+            elif self.state_count >= STATE_COUNT_THRESHOLD:
+                self.last_state = self.state
+            self.state_count += 1
+            self.upcoming_light_pub.publish(Int32(self.light_wp))
+            self.upcoming_light_state_pub.publish(UInt8(self.last_state))
 
     def get_closest_waypoint(self, pose):
         """Identifies the closest path waypoint to the given position
@@ -162,7 +169,6 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        #TODO implement
         min_distance = 1e6
         wp_closest = None
         last_distance = None
@@ -226,21 +232,17 @@ class TLDetector(object):
         stop = -1
 
         # List of positions that correspond to the line to stop in front of for a given intersection
-#        stop_line_positions = self.config['stop_line_positions']
-#        if(self.pose):
-#            car_position = self.get_closest_waypoint(self.pose)
-
-        #TODO find the closest visible traffic light (if one exists)
         if self.init_done and self.current_waypoint_index != None:
             for light_index in range(len(self.light_waypoints)):
                 # get the waypoint index delta to our current waypoint for this light
                 waypoint_index_delta = (self.light_waypoints[light_index] - self.current_waypoint_index +
                                         len(self.waypoints)) % len(self.waypoints)
                 # calculate our distance to this light
+#                rospy.loginfo("process_traffic_lights: current_waypoint_index=%s", self.current_waypoint_index)
                 distanceToLight = self.distanceToWaypoint(self.waypoints[self.light_waypoints[light_index]].pose.pose,
                                                           self.waypoints[self.current_waypoint_index].pose.pose)
                 # only proceed if the light is within the maximum detection range and the waypoint index is not too far away
-                if distanceToLight < self.max_detect_distance and waypoint_index_delta < LOOKAHEAD_WPS:
+                if distanceToLight < self.max_detect_distance and waypoint_index_delta < self.waypoint_loookahead:
                     rospy.loginfo("process_traffic_lights: traffic light %s %.2fm ahead of waypoint %s in state %s",
                                   light_index, distanceToLight, self.current_waypoint_index, self.light_state_str[self.lights[light_index].state])
                     light = light_index
@@ -255,8 +257,8 @@ class TLDetector(object):
                             self.waypoints[self.stop_waypoints[light_index]].pose.pose,
                             self.waypoints[self.current_waypoint_index].pose.pose)
                         # only proceed if the stop line waypoint index is not too far away
-                        if waypoint_index_delta < LOOKAHEAD_WPS:
-                            rospy.loginfo("process_traffic_lights: stop %s %.2fmm ahead of waypoint %s",
+                        if waypoint_index_delta < self.waypoint_loookahead:
+                            rospy.loginfo("process_traffic_lights: stop %s %.2fm ahead of waypoint %s",
                                           stop_index, distanceToStop, self.current_waypoint_index)
                             stop = stop_index
                         else:

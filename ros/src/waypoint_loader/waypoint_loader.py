@@ -23,12 +23,12 @@ class WaypointLoader(object):
         self.pub = rospy.Publisher('/base_waypoints', Lane, queue_size=1, latch=True)
 
         self.velocity = self.kmph2mps(rospy.get_param('~velocity'))
-        self.new_waypoint_loader(rospy.get_param('~path'))
+        self.new_waypoint_loader(rospy.get_param('~path'), rospy.get_param('~direction'))
         rospy.spin()
 
-    def new_waypoint_loader(self, path):
+    def new_waypoint_loader(self, path, direction):
         if os.path.isfile(path):
-            waypoints = self.load_waypoints(path)
+            waypoints = self.load_waypoints(path, direction)
             self.publish(waypoints)
             rospy.loginfo('Waypoint Loded')
         else:
@@ -40,7 +40,10 @@ class WaypointLoader(object):
     def kmph2mps(self, velocity_kmph):
         return (velocity_kmph * 1000.) / (60. * 60.)
 
-    def load_waypoints(self, fname):
+    def load_waypoints(self, fname, direction):
+        clockwise = True
+        if direction == 'anticlockwise':
+            clockwise = False
         waypoints = []
         with open(fname) as wfile:
             reader = csv.DictReader(wfile, CSV_HEADER)
@@ -52,8 +55,10 @@ class WaypointLoader(object):
                 q = self.quaternion_from_yaw(float(wp['yaw']))
                 p.pose.pose.orientation = Quaternion(*q)
                 p.twist.twist.linear.x = float(self.velocity)
-
                 waypoints.append(p)
+        if clockwise == False:
+            rospy.loginfo('Waypoints anticlockwise')
+            waypoints.reverse()
         return self.decelerate(waypoints)
 
     def distance(self, p1, p2):
