@@ -5,9 +5,8 @@ from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint, TrafficLight
 from std_msgs.msg import Int32, UInt8
 from copy import deepcopy
-from scipy import spatial
-import numpy as np
 import tf
+from waypoint_updater.kd_tree import KDTree
 
 import math
 
@@ -67,7 +66,7 @@ class WaypointUpdater(object):
         # get the maximum detection distance for the lights in m
         self.max_detect_distance = rospy.get_param('/tl_detector/max_detect_distance', 100)
         # spacial tree to store waypoints
-        self.tree = None
+        self.tree = KDTree()
         # number waypoints ahead to plan for
         self.waypoint_loookahead = LOOKAHEAD_WPS
 
@@ -79,7 +78,7 @@ class WaypointUpdater(object):
         rate = rospy.Rate(self.update_rate)
         while not rospy.is_shutdown():
             # do we have the base waypoints yet?
-            if self.waypoints and self.current_pose and self.tree != None:
+            if self.waypoints and self.current_pose and self.tree and self.tree.is_initialized:
                 # find out which waypoint we are next nearest to
                 wp_closest = self.locateNextWaypoint()
 
@@ -126,10 +125,7 @@ class WaypointUpdater(object):
     def locateNextWaypoint(self):
 
         #query the nearest point to the vehicle
-        distance, wps_closest = self.tree.query(np.array([[self.current_pose.position.x, self.current_pose.position.y, self.current_pose.position.z]]))
-
-        wp_closest = wps_closest[0]
-        distance = distance[0]
+        distance, wp_closest = self.tree.query(self.current_pose)
 
         #calculate euler angles of current vehicle pose
         euler = tf.transformations.euler_from_quaternion([self.current_pose.orientation.x,self.current_pose.orientation.y,
@@ -166,19 +162,7 @@ class WaypointUpdater(object):
         #setup a kd-tree for efficient nearest neighor lookup
         #(see https://docs.scipy.org/doc/scipy-0.19.1/reference/generated/scipy.spatial.KDTree.html)
         #(Paper: https://www.cs.umd.edu/~mount/Papers/iccs01-kflat.pdf)
-
-        x=[]
-        y=[]
-        z=[]
-
-        for waypoint in waypoints.waypoints:
-            x.append(waypoint.pose.pose.position.x)
-            y.append(waypoint.pose.pose.position.y)
-            z.append(waypoint.pose.pose.position.z)
-
-        data = zip(x,y,z)
-
-        self.tree = spatial.KDTree(data)
+        self.tree.init_tree(self.waypoints)
 
     def traffic_cb(self, msg):
         self.next_stop = msg.data

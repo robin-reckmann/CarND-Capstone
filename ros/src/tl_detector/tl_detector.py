@@ -11,6 +11,7 @@ import tf
 import cv2
 import yaml
 import math
+from waypoint_updater.kd_tree import KDTree
 
 STATE_COUNT_THRESHOLD = 3
 LOOKAHEAD_WPS = 400
@@ -41,6 +42,8 @@ class TLDetector(object):
         self.light_state_str = ['red', 'yellow', 'green', 'unknown', 'unknown']
         # number waypoints ahead to plan for
         self.waypoint_loookahead = LOOKAHEAD_WPS
+
+        self.tree = KDTree()
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -83,13 +86,15 @@ class TLDetector(object):
         self.waypoint_loookahead = min(LOOKAHEAD_WPS, len(waypoints.waypoints) - 1)
         rospy.loginfo("waypoints_cb: received %s base waypoints setting lookahead to %s", len(waypoints.waypoints), self.waypoint_loookahead)
 
+        self.tree.init_tree(self.waypoints)
+
     def current_waypoint_cb(self, index):
         self.current_waypoint_index = index.data
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
         # only once search through the list of traffic lights and find their respective nearest waypoints
-        if self.waypoints != None and self.init_done == False:
+        if self.waypoints != None and self.init_done == False and self.tree and self.tree.is_initialized:
             self.init_traffic_light_waypoints()
             self.init_stop_line_waypoints()
             self.init_traffic_light_stops()
@@ -169,19 +174,8 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        min_distance = 1e6
-        wp_closest = None
-        last_distance = None
-        for wp_index in range(len(self.waypoints)):
-            distance = self.distanceToWaypoint(pose, self.waypoints[wp_index].pose.pose)
-            if distance < min_distance:
-                min_distance = distance
-                wp_closest = wp_index
-            else:
-                if last_distance != None and last_distance < distance and distance < self.max_detect_distance:
-                    break
-            last_distance = distance
-        rospy.loginfo("get_closest_waypoint: wp_closet=%s distance=%.2fm", wp_closest, min_distance)
+        distance, wp_closest = self.tree.query(pose)
+
         return wp_closest
 
     def distanceBetweenWaypoints(self, wp1_index, wp2_index):
@@ -232,7 +226,7 @@ class TLDetector(object):
         stop = -1
 
         # List of positions that correspond to the line to stop in front of for a given intersection
-        if self.init_done and self.current_waypoint_index != None:
+        if self.init_done and self.current_waypoint_index != None and self.tree and self.tree.is_initialized:
             for light_index in range(len(self.light_waypoints)):
                 # get the waypoint index delta to our current waypoint for this light
                 waypoint_index_delta = (self.light_waypoints[light_index] - self.current_waypoint_index +
