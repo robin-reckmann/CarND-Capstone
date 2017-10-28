@@ -6,7 +6,7 @@ from styx_msgs.msg import Lane, Waypoint, TrafficLight
 from std_msgs.msg import Int32, UInt8
 from copy import deepcopy
 import tf
-from kd_tree import KDTree
+from waypoint_updater.kd_tree import KDTree
 
 import math
 
@@ -78,7 +78,7 @@ class WaypointUpdater(object):
         rate = rospy.Rate(self.update_rate)
         while not rospy.is_shutdown():
             # do we have the base waypoints yet?
-            if self.waypoints and self.current_pose and self.tree.is_initialized == True:
+            if self.waypoints and self.current_pose and self.tree and self.tree.is_initialized:
                 # find out which waypoint we are next nearest to
                 wp_closest = self.locateNextWaypoint()
 
