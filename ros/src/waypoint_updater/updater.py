@@ -32,14 +32,6 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater', log_level=rospy.DEBUG)
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-
-        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
-        rospy.Subscriber('/traffic_state', UInt8, self.traffic_state_cb, queue_size=1)
-        rospy.Subscriber('/obstacle_waypoint', Lane, self.obstacle_cb, queue_size=1)
-
-
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
         self.current_waypoint_index = rospy.Publisher('current_waypoint_index', Int32, queue_size=1)
 
@@ -70,6 +62,12 @@ class WaypointUpdater(object):
         # number waypoints ahead to plan for
         self.waypoint_loookahead = LOOKAHEAD_WPS
 
+        # subscribe to the various nodes
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
+        rospy.Subscriber('/traffic_state', UInt8, self.traffic_state_cb, queue_size=1)
+        rospy.Subscriber('/obstacle_waypoint', Lane, self.obstacle_cb, queue_size=1)
 
         self.loop()
 
