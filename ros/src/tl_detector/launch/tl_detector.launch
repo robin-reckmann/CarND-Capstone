@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
     <node pkg="tl_detector" type="tl_detector.py" name="tl_detector" output="screen" cwd="node">
-        <param name="max_detect_distance" value="100" />
+        <param name="max_detect_distance" value="80" />
     </node>
 </launch>

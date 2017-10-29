@@ -100,7 +100,8 @@ class WaypointUpdater(object):
                                     if wp_index == self.next_stop:
                                         rospy.loginfo("WaypointUpdater: Red light ahead reducing waypoint %s velcocity to %.2fkmh", wp_index, target_velocity * 3.6)
                                 elif target_velocity > self.speed_limit_stop:
-                                    target_velocity = self.speed_limit_stop
+                                    if wp_distance_to_stop > 10.0:
+                                        target_velocity = self.speed_limit_stop
                         self.set_waypoint_velocity(self.waypoints, wp_index, target_velocity)
                         waypoints.append(self.waypoints[wp_index])
 #                rospy.loginfo("WaypointUpdater: waypoints=%s", waypoints)
