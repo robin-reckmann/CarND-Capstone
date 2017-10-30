@@ -32,14 +32,6 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater', log_level=rospy.DEBUG)
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-
-        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
-        rospy.Subscriber('/traffic_state', UInt8, self.traffic_state_cb, queue_size=1)
-        rospy.Subscriber('/obstacle_waypoint', Lane, self.obstacle_cb, queue_size=1)
-
-
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
         self.current_waypoint_index = rospy.Publisher('current_waypoint_index', Int32, queue_size=1)
 
@@ -70,6 +62,12 @@ class WaypointUpdater(object):
         # number waypoints ahead to plan for
         self.waypoint_loookahead = LOOKAHEAD_WPS
 
+        # subscribe to the various nodes
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
+        rospy.Subscriber('/traffic_state', UInt8, self.traffic_state_cb, queue_size=1)
+        rospy.Subscriber('/obstacle_waypoint', Lane, self.obstacle_cb, queue_size=1)
 
         self.loop()
 
@@ -102,7 +100,8 @@ class WaypointUpdater(object):
                                     if wp_index == self.next_stop:
                                         rospy.loginfo("WaypointUpdater: Red light ahead reducing waypoint %s velcocity to %.2fkmh", wp_index, target_velocity * 3.6)
                                 elif target_velocity > self.speed_limit_stop:
-                                    target_velocity = self.speed_limit_stop
+                                    if wp_distance_to_stop > 10.0:
+                                        target_velocity = self.speed_limit_stop
                         self.set_waypoint_velocity(self.waypoints, wp_index, target_velocity)
                         waypoints.append(self.waypoints[wp_index])
 #                rospy.loginfo("WaypointUpdater: waypoints=%s", waypoints)

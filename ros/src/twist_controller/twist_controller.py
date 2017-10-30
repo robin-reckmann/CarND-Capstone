@@ -10,7 +10,6 @@ ONE_MPH = 0.44704
 
 class Controller(object):
     def __init__(self, *args, **kwargs):
-        # TODO: Implement
         self.vehicle_mass = kwargs['vehicle_mass']
         self.brake_deadband = kwargs['brake_deadband']
         self.decel_limit = kwargs['decel_limit']
@@ -22,6 +21,8 @@ class Controller(object):
         self.max_steer_angle = kwargs['max_steer_angle']
         self.min_steer_angle = -1.0 * self.max_steer_angle
         self.update_rate = kwargs['update_rate']
+        self.throttle_scale = kwargs['throttle_scale']
+
         self.min_velocity = 1.0 # not sure how to set this, I assume when we are stopped we might want to steer still?
         self.yaw_controller = YawController(self.wheel_base, self.steer_ratio, self.min_velocity,
                                             self.max_lat_accel, self.max_steer_angle)
@@ -33,18 +34,11 @@ class Controller(object):
                               self.decel_limit, #mn
                               self.accel_limit) #mx
 
-        self.angular_pid = PID(0.8,  #kp
-                               0.0008, #ki 
-                               0.08, #kd
-                               self.min_steer_angle, #mn
-                               self.max_steer_angle) #mx
-
         self.cur_time = 0.0
         self.prev_time = 0.0
 
 
     def control(self, *args, **kwargs):
-        # TODO: Change the arg, kwarg list to suit your needs
         target_velocity = args[0]
         target_yaw = args[1]
         current_velocity = args[2]
@@ -64,7 +58,7 @@ class Controller(object):
 
             if delta_velocity > 0.0:
                 # car should speed up
-                throttle = linear_pid_update
+                throttle = linear_pid_update * self.throttle_scale
                 brake = 0.0
             elif delta_velocity < -1 * (self.brake_deadband):
                 # car should brake if target velocity is below brake deadband
@@ -79,14 +73,8 @@ class Controller(object):
             #filtered_yaw = self.low_pass_filter.filt(target_yaw)
             steer = self.yaw_controller.get_steering(target_velocity, target_yaw, current_velocity)
 
-
             rospy.loginfo("twist_controller: throttle=%s,brake=%s, steer=%s, delta_velocity=%s, pid_step=%s", throttle, brake, steer, delta_velocity, linear_pid_update)
 
-            #if current_velocity < 4.0:
-                #if steer > 1.0:
-                #    steer = 1.0
-                #elif steer < -1.0:
-                #    steer = -1.0
         else: #not enabled
             self.linear_pid.reset()
         # Return throttle, brake, steer
