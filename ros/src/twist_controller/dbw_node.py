@@ -46,6 +46,7 @@ class DBWNode(object):
         steer_ratio = rospy.get_param('~steer_ratio', 14.8)
         max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
+        throttle_scale = rospy.get_param('~throttle_scale', 1.)
 
         self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
                                          SteeringCmd, queue_size=1)
@@ -62,7 +63,7 @@ class DBWNode(object):
         # last received velocity state
         self.current_velocity = None
 
-        # TODO: Create `TwistController` object
+        # Create `TwistController` object
         controller_params = {'vehicle_mass':vehicle_mass,
                              'brake_deadband':brake_deadband,
                              'decel_limit':decel_limit,
@@ -72,11 +73,12 @@ class DBWNode(object):
                              'steer_ratio':steer_ratio,
                              'max_lat_accel':max_lat_accel,
                              'max_steer_angle':max_steer_angle,
-                             'update_rate':self.update_rate
+                             'update_rate':self.update_rate,
+                             'throttle_scale':throttle_scale
                              }
         self.controller = Controller(**controller_params)
 
-        # TODO: Subscribe to all the topics you need to
+        # Subscribe to all the topics you need to
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb, queue_size=1)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb, queue_size=1)
         rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb, queue_size=1)
@@ -86,7 +88,7 @@ class DBWNode(object):
     def loop(self):
         rate = rospy.Rate(self.update_rate)
         while not rospy.is_shutdown():
-            # TODO: Get predicted throttle, brake, and steering using `twist_controller`
+            # Get predicted throttle, brake, and steering using `twist_controller`
             # You should only publish the control commands if dbw is enabled
             if self.current_velocity and self.current_twist != None:
                 target_velocity = self.current_twist.twist.linear.x
